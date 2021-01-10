@@ -1,84 +1,194 @@
-use std::slice::Iter;
+use std::fmt::{Display, Formatter, Result};
 
 const HOW_MANY_MANCALAS: usize = 6;
-const STARTING_SPACES: [u8; 6] = [4; 6];
-const INPUT_FILE_LINES: u8 = 14;
+const STARTING_BOARD: [u8; 14] = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];
+const BOARD_SPOTS: usize = 14;
+const OUR_GOAL: u8 = 6;
+const THEIR_GOAL: u8 = 13;
+const MARBLES: u8 = 48;
 
 struct Board {
-    opponent_points: u8,
-    opponent_spaces: [u8; 6],
-    our_points: u8,
-    our_spaces: [u8; 6],
+    board: [u8; 14],
     our_turn: bool
 }
+impl Display for Board {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        for i in 0 .. 7 {
+            write!(f, "{} ", self.board[self.board.len() - i - 1])?;
+        }
+        writeln!(f)?;
+        write!(f, "  ")?;
+        for i in 0 .. 7 {
+            write!(f, "{} ", self.board[i])?;
+        }
+        writeln!(f)?;
+        let turn_message = match self.our_turn {
+            true => "your",
+            false => "your opponent's"
+        };
+        write!(f, "Its {} turn.", turn_message)?;
+        Ok(())
+    }
+}
 impl Board {
+    fn clear_board_to_sides(&mut self, wer_out: bool) {
+        let goal = match wer_out {
+            true => THEIR_GOAL,
+            false => OUR_GOAL
+        } as usize;
+        let bins_to_clear = match wer_out {
+            true => 7 ..= 12,
+            false => 0 ..= 5
+        };
 
-    fn distribute(&mut self, space: u8) {
+        bins_to_clear.for_each(|i| {
+            let in_hand = self.board[i];
+            self.board[goal] += in_hand;
+            self.board[i] = 0;
+        });
+    }
+
+    // None means the game is done, true means the player got an extra turn
+    fn make_move(&mut self, mut bucket: u8) -> Option<bool> {
+        let in_hand = self.board[bucket as usize];
+        self.board[bucket as usize] = 0;
+
+        let mut free_turn = false;
+        for mut i in 0 .. in_hand {
+            bucket += 1;
+            bucket %= BOARD_SPOTS as u8;
+            if bucket == OUR_GOAL {
+                match self.our_turn {
+                    true => {
+                        self.board[bucket as usize] += 1;
+                        if i == in_hand - 1 {
+                            free_turn = true;
+                        }
+                    },
+                    false => i -= 1
+                }
+            }
+            else if bucket == THEIR_GOAL {
+                match self.our_turn {
+                    true => i -= 1,
+                    false => {
+                        self.board[bucket as usize] += 1;
+                        if i == in_hand - 1 {
+                            free_turn = true;
+                        }
+                    }
+                }
+            }
+            else {
+                self.board[bucket as usize] += 1;
+            }
+        }
+        let our_sum: u8 = self.board.iter().take(6).sum();
+        let opponent_sum: u8 = self.board.iter().skip(7).take(5).sum();
+        if our_sum == 0 || opponent_sum == 0 {
+            self.clear_board_to_sides(our_sum == 0);
+            None
+        } else {
+            Some(free_turn)
+        }
+    }
+
+    fn move_is_valid(&self, bucket: u8) -> bool {
+        if self.board[bucket as usize] == 0 {
+            return false
+        }
+
         match self.our_turn {
             true => {
-                let in_hand = self.our_spaces[space];
-                self.our_spaces[space] = 0;
-                let acc = space;
-                for i in 1 ..= in_hand {
-                    let curr = acc + i;
-                    let x = curr / 6;
-                    let y = curr % 6;
-                    if x != 0 {
-                        if y == 0
-                    }
+                match bucket {
+                    0 ..= 5 => true,
+                    _ => false
+                }
+            },
+            false => {
+                match bucket {
+                    7 ..= 12 => true,
+                    _ => false
                 }
             }
         }
     }
 
-    pub fn win_game(&mut self) {
-        match our_turn {
-            true => {
-                for i in 0 .. HOW_MANY_MANCALAS {
-                    if self.our_spaces[i] != 0 {
-                        distribute
+    fn end_game_message(&self) {
+        print!("Game over. ");
+        let our_score = self.board[OUR_GOAL as usize];
+        let next_communication = match our_score {
+            0 ..= 23 => format!("You lost, {} to {}", our_score, MARBLES - our_score),
+            24 => format!("You guys tied! {} to {}", 24, 24),
+            _ => format!("You won! {} to {}", our_score, MARBLES - our_score)
+        };
+        println!("{}", next_communication);
+    }
+
+    pub fn play_game(&mut self) {
+        loop {
+            let mut line = String::new();
+            let b1 = std::io::stdin().read_line(&mut line).unwrap();
+            if b1 < 2 || b1 > 3 {
+                println!("Enter only one number, 0 through 5 when your turn, or 7 through 12 for opponent move");
+            } else {
+                let num = line.chars().take(b1 - 1).collect::<String>().parse::<u8>();
+                match num {
+                    Ok(num) => {
+                        if self.move_is_valid(num) {
+                            println!("Playing bucket: {}", num);
+                            let free_turn = self.make_move(num);
+                            match free_turn {
+                                Some(free_turn) => {
+                                    if !free_turn {
+                                        self.our_turn = !self.our_turn;
+                                        println!("{}", self);
+                                    } else {
+                                        println!("{}", self);
+                                        println!("You get a free turn. What will you play?");
+                                    }
+                                },
+                                None => {
+                                    self.end_game_message();
+                                    return
+                                }
+                            }
+                        } else {
+                            println!("Invalid move! Tratate otra vez");
+                        }
+                    },
+                    Err(_) => {
+                        println!("Invalid move! Tratate otra vez");
                     }
                 }
             }
         }
-    }
-
-    fn assemble_owned_array(stream: &mut Iter<u8>) -> [u8; 6] {
-        let mut x = [0 as u8; 6];
-        for i in 0 .. 6 {
-            x[i] = stream.next().unwrap().clone()
-        }
-        x
     }
 
     // starts from your first mancala on the left and circles around
     pub fn new_intermediate(filename: String, our_turn: bool) -> Board {
-        let items = filename.lines().map(|x| x.parse::<u8>().unwrap()).collect::<Vec<u8>>();
-        if items.len() != 14 {
-            panic!("Board file must have {} lines. First the opponent's score, the quantities of your {} mancalas, the quantities of your opponent's {} mancalas and then your score", INPUT_FILE_LINES, HOW_MANY_MANCALAS, HOW_MANY_MANCALAS);
-        }
-        let mut shared_stream = items.iter();
+        let items = filename.lines()
+            .map(|x| x.parse::<u8>().unwrap())
+            .collect::<Vec<u8>>();
 
-        let opponent_points = &shared_stream.next().unwrap().clone();
-        let our_spaces = Board::assemble_owned_array(&mut shared_stream);
-        let opponent_spaces = Board::assemble_owned_array(&mut shared_stream);
-        let our_points = &shared_stream.next().unwrap().clone();
+        if items.len() != BOARD_SPOTS {
+            panic!("Board file must have {} lines. First the opponent's score, the quantities of your {} mancalas, the quantities of your opponent's {} mancalas and then your score", BOARD_SPOTS, HOW_MANY_MANCALAS, HOW_MANY_MANCALAS);
+        }
+
+        let mut board = [0u8; 14];
+        items.iter()
+            .enumerate()
+            .for_each(|(i, x)| board[i] = *x);
 
         Board {
-            opponent_points: *opponent_points,
-            opponent_spaces,
-            our_points: *our_points,
-            our_spaces,
+            board,
             our_turn
         }
     }
 
     pub fn new(our_turn: bool) -> Board {
         Board {
-            opponent_points: 0,
-            opponent_spaces: STARTING_SPACES,
-            our_points: 0,
-            our_spaces: STARTING_SPACES,
+            board: STARTING_BOARD,
             our_turn
         }
     }
@@ -97,5 +207,6 @@ fn main() {
         _ => panic!("The only argument should be a the board file if loading from a file. You entered more than one argument")
     };
 
-    board.win_game();
+    println!("{}", board);
+    board.play_game();
 }
