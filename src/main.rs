@@ -1,4 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
+use std::fs;
+use std::iter::{Peekable, Skip};
+use std::str::Lines;
 
 const HOW_MANY_MANCALAS: usize = 6;
 const STARTING_BOARD: [u8; 14] = [4,4,4,4,4,4,0,4,4,4,4,4,4,0];
@@ -54,33 +57,36 @@ impl Board {
         self.board[bucket as usize] = 0;
 
         let mut free_turn = false;
-        for mut i in 0 .. in_hand {
-            bucket += 1;
-            bucket %= BOARD_SPOTS as u8;
-            if bucket == OUR_GOAL {
-                match self.our_turn {
-                    true => {
-                        self.board[bucket as usize] += 1;
-                        if i == in_hand - 1 {
-                            free_turn = true;
-                        }
-                    },
-                    false => i -= 1
+        for i in 0 .. in_hand {
+            loop {
+                bucket += 1;
+                bucket %= BOARD_SPOTS as u8;
+                if bucket == OUR_GOAL {
+                    match self.our_turn {
+                        true => {
+                            self.board[bucket as usize] += 1;
+                            if i == in_hand - 1 {
+                                free_turn = true;
+                            }
+                        },
+                        false => continue
+                    }
                 }
-            }
-            else if bucket == THEIR_GOAL {
-                match self.our_turn {
-                    true => i -= 1,
-                    false => {
-                        self.board[bucket as usize] += 1;
-                        if i == in_hand - 1 {
-                            free_turn = true;
+                else if bucket == THEIR_GOAL {
+                    match self.our_turn {
+                        true => continue,
+                        false => {
+                            self.board[bucket as usize] += 1;
+                            if i == in_hand - 1 {
+                                free_turn = true;
+                            }
                         }
                     }
                 }
-            }
-            else {
-                self.board[bucket as usize] += 1;
+                else {
+                    self.board[bucket as usize] += 1;
+                }
+                break;
             }
         }
         let our_sum: u8 = self.board.iter().take(6).sum();
@@ -89,6 +95,9 @@ impl Board {
             self.clear_board_to_sides(our_sum == 0);
             None
         } else {
+            if !free_turn {
+                self.our_turn = !self.our_turn
+            }
             Some(free_turn)
         }
     }
@@ -140,11 +149,8 @@ impl Board {
                             let free_turn = self.make_move(num);
                             match free_turn {
                                 Some(free_turn) => {
-                                    if !free_turn {
-                                        self.our_turn = !self.our_turn;
-                                        println!("{}", self);
-                                    } else {
-                                        println!("{}", self);
+                                    println!("{}", self);
+                                    if free_turn {
                                         println!("You get a free turn. What will you play?");
                                     }
                                 },
@@ -166,8 +172,8 @@ impl Board {
     }
 
     // starts from your first mancala on the left and circles around
-    pub fn new_intermediate(filename: String, our_turn: bool) -> Board {
-        let items = filename.lines()
+    pub fn new_intermediate(file: Peekable<Lines>, our_turn: bool) -> Board {
+        let items = file
             .map(|x| x.parse::<u8>().unwrap())
             .collect::<Vec<u8>>();
 
@@ -186,6 +192,15 @@ impl Board {
         }
     }
 
+    pub fn new_with_turns(turns: Skip<Peekable<Lines>>, i_start: bool) -> Board {
+        let mut board = Board::new(i_start);
+        turns.for_each(|x| {
+            let _ = board.make_move(x.parse().unwrap());
+            ()
+        });
+        board
+    }
+
     pub fn new(our_turn: bool) -> Board {
         Board {
             board: STARTING_BOARD,
@@ -197,8 +212,16 @@ impl Board {
 fn main() {
     let mut board = match std::env::args().len() {
         2 => {
-            let board_filename = std::env::args().skip(1).take(1).collect();
-            Board::new_intermediate(board_filename, true)
+            let filename = std::env::args().skip(1).next().unwrap();
+            println!("Loading file: {} as the board", filename);
+
+            let file = fs::read_to_string(filename).unwrap();
+            let mut file_iter = file.lines().peekable();
+            match *file_iter.peek().unwrap() {
+                "m" => Board::new_with_turns(file_iter.skip(1), true),
+                " " => Board::new_with_turns(file_iter.skip(1), false),
+                _ => Board::new_intermediate(file_iter, true)
+            }
         },
         1 => {
             println!("Starting from a new game board");
