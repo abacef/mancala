@@ -96,6 +96,25 @@ impl Board {
             None
         } else {
             if !free_turn {
+                // check for capture
+                if self.board[bucket as usize] == 1 {
+                    let op = BOARD_SPOTS - bucket as usize - 2;
+                    if self.our_turn && bucket < 6 {
+                        println!("Capture!");
+                        let in_hand_capture = self.board[op] + self.board[bucket as usize];
+                        self.board[op] = 0;
+                        self.board[bucket as usize] = 0;
+                        self.board[OUR_GOAL as usize] += in_hand_capture;
+                    }
+                    else if !self.our_turn && bucket >= 7 && bucket < 13 {
+                        println!("Capture!");
+                        let in_hand_capture = self.board[op] + self.board[bucket as usize];
+                        self.board[op] = 0;
+                        self.board[bucket as usize] = 0;
+                        self.board[THEIR_GOAL as usize] += in_hand_capture;
+                    }
+                }
+
                 self.our_turn = !self.our_turn
             }
             Some(free_turn)
