@@ -99,19 +99,18 @@ impl Board {
                 // check for capture
                 if self.board[bucket as usize] == 1 {
                     let op = BOARD_SPOTS - bucket as usize - 2;
-                    if self.our_turn && bucket < 6 {
-                        println!("Capture!");
+                    let whose_goal_to_insert = match self.our_turn {
+                        true => OUR_GOAL,
+                        false => THEIR_GOAL
+                    } as usize;
+
+                    if self.board[op] != 0 &&
+                        ((self.our_turn && bucket < 6) ||
+                            (!self.our_turn && bucket >= 7 && bucket < 13)) {
                         let in_hand_capture = self.board[op] + self.board[bucket as usize];
                         self.board[op] = 0;
                         self.board[bucket as usize] = 0;
-                        self.board[OUR_GOAL as usize] += in_hand_capture;
-                    }
-                    else if !self.our_turn && bucket >= 7 && bucket < 13 {
-                        println!("Capture!");
-                        let in_hand_capture = self.board[op] + self.board[bucket as usize];
-                        self.board[op] = 0;
-                        self.board[bucket as usize] = 0;
-                        self.board[THEIR_GOAL as usize] += in_hand_capture;
+                        self.board[whose_goal_to_insert] += in_hand_capture;
                     }
                 }
 
