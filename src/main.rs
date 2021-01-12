@@ -17,12 +17,12 @@ struct Board {
 impl Display for Board {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         for i in 0 .. 7 {
-            write!(f, "{} ", self.board[self.board.len() - i - 1])?;
+            write!(f, "{number:>width$} ", number=self.board[self.board.len() - i - 1], width=3)?;
         }
         writeln!(f)?;
-        write!(f, "  ")?;
+        write!(f, "    ")?;
         for i in 0 .. 7 {
-            write!(f, "{} ", self.board[i])?;
+            write!(f, "{number:>width$} ", number=self.board[i], width=3)?;
         }
         writeln!(f)?;
         let turn_message = match self.our_turn {
@@ -34,21 +34,24 @@ impl Display for Board {
     }
 }
 impl Board {
-    fn clear_board_to_sides(&mut self, wer_out: bool) {
-        let goal = match wer_out {
-            true => THEIR_GOAL,
-            false => OUR_GOAL
-        } as usize;
-        let bins_to_clear = match wer_out {
-            true => 7 ..= 12,
-            false => 0 ..= 5
-        };
+    fn clear_board_to_sides(&mut self) {
+        let our_sum: u8 = self.board.iter().take(6).sum();
+        let opponent_sum: u8 = self.board.iter().skip(7).take(6).sum();
 
-        bins_to_clear.for_each(|i| {
-            let in_hand = self.board[i];
-            self.board[goal] += in_hand;
-            self.board[i] = 0;
-        });
+        for i in 0 .. BOARD_SPOTS {
+            if i != OUR_GOAL as usize && i != THEIR_GOAL as usize {
+                self.board[i] = 0;
+            }
+        }
+
+        self.board[OUR_GOAL as usize] += our_sum;
+        self.board[THEIR_GOAL as usize] += opponent_sum;
+    }
+
+    fn game_is_done(&self) -> bool {
+        let our_sum: u8 = self.board.iter().take(6).sum();
+        let opponent_sum: u8 = self.board.iter().skip(7).take(6).sum();
+        our_sum == 0 || opponent_sum == 0
     }
 
     // None means the game is done, true means the player got an extra turn
@@ -89,35 +92,34 @@ impl Board {
                 break;
             }
         }
-        let our_sum: u8 = self.board.iter().take(6).sum();
-        let opponent_sum: u8 = self.board.iter().skip(7).take(5).sum();
-        if our_sum == 0 || opponent_sum == 0 {
-            self.clear_board_to_sides(our_sum == 0);
-            None
-        } else {
-            if !free_turn {
-                // check for capture
-                if self.board[bucket as usize] == 1 {
-                    let op = BOARD_SPOTS - bucket as usize - 2;
-                    let whose_goal_to_insert = match self.our_turn {
-                        true => OUR_GOAL,
-                        false => THEIR_GOAL
-                    } as usize;
 
-                    if self.board[op] != 0 &&
-                        ((self.our_turn && bucket < 6) ||
-                            (!self.our_turn && bucket >= 7 && bucket < 13)) {
-                        let in_hand_capture = self.board[op] + self.board[bucket as usize];
-                        self.board[op] = 0;
-                        self.board[bucket as usize] = 0;
-                        self.board[whose_goal_to_insert] += in_hand_capture;
-                    }
+        if !free_turn {
+            // check for capture
+            if self.board[bucket as usize] == 1 {
+                let op = BOARD_SPOTS - bucket as usize - 2;
+                let whose_goal_to_insert = match self.our_turn {
+                    true => OUR_GOAL,
+                    false => THEIR_GOAL
+                } as usize;
+
+                if self.board[op] != 0 &&
+                    ((self.our_turn && bucket < 6) ||
+                        (!self.our_turn && bucket >= 7 && bucket < 13)) {
+                    let in_hand_capture = self.board[op] + self.board[bucket as usize];
+                    self.board[op] = 0;
+                    self.board[bucket as usize] = 0;
+                    self.board[whose_goal_to_insert] += in_hand_capture;
                 }
-
-                self.our_turn = !self.our_turn
             }
-            Some(free_turn)
+
+            if self.game_is_done() {
+                self.clear_board_to_sides();
+                return None
+            }
+
+            self.our_turn = !self.our_turn
         }
+        Some(free_turn)
     }
 
     fn move_is_valid(&self, bucket: u8) -> bool {
@@ -243,7 +245,7 @@ fn main() {
         },
         1 => {
             println!("Starting from a new game board");
-            Board::new(true)
+            Board::new(false)
         },
         _ => panic!("The only argument should be a the board file if loading from a file. You entered more than one argument")
     };
