@@ -10,6 +10,7 @@ const OUR_GOAL: u8 = 6;
 const THEIR_GOAL: u8 = 13;
 const MARBLES: u8 = 48;
 
+#[derive(Copy, Clone)]
 struct Board {
     board: [u8; 14],
     our_turn: bool
@@ -111,14 +112,15 @@ impl Board {
                     self.board[whose_goal_to_insert] += in_hand_capture;
                 }
             }
+        }
 
-            if self.game_is_done() {
-                self.clear_board_to_sides();
-                return None
-            }
-
+        if self.game_is_done() {
+            self.clear_board_to_sides();
+            return None
+        } else if !free_turn {
             self.our_turn = !self.our_turn
         }
+
         Some(free_turn)
     }
 
@@ -154,8 +156,72 @@ impl Board {
         println!("{}", next_communication);
     }
 
+    // (x, y) x through y
+    fn find_curr_best(&self) -> (i8, Vec<u8>) {
+        let mut choices = [-1i8; 6];
+        let goal = if self.our_turn {OUR_GOAL} else {THEIR_GOAL} as usize;
+        for i in 0 .. 6 {
+            let mut to_send = i;
+            if !self.our_turn {
+                to_send += 7;
+            }
+            if !self.move_is_valid(to_send) {
+                continue
+            }
+
+            let mut clone = self.clone();
+
+            println!("Moving {}", to_send);
+            match clone.make_move(to_send) {
+                Some(x) => {
+                    let extra = match x {
+                        true => {
+                            println!("free move!");
+                            println!("recursing");
+                            let c = clone.find_curr_best();
+                            println!("unrecursing");
+                            c
+                        },
+                        false => (0, vec!(0))
+                    };
+                    let gain = (clone.board[goal] - self.board[goal]) as i8;
+                    println!("Move on {} is {}", to_send, gain + extra.0);
+                    if gain + extra.0 > choices[i as usize] {
+                        choices[i as usize] = gain + extra.0;
+                    }
+                },
+                None => {
+                    let gain = (clone.board[goal] - self.board[goal]) as i8;
+                    println!("Move on {} is {}", to_send, gain);
+                    if gain > choices[i as usize] {
+                        choices[i as usize] = gain;
+                    }
+                }
+            }
+
+        }
+
+        let max_val = choices.iter().max().unwrap();
+        let items = choices.iter()
+            .enumerate()
+            .filter(|x| *x.1 == *max_val)
+            .map(|x| {
+                let mut c = x.0 as u8;
+                if !self.our_turn {
+                    c += 7;
+                }
+                c
+            })
+            .collect::<Vec<u8>>();
+
+        (*max_val, items)
+    }
+
     pub fn play_game(&mut self) {
         loop {
+            let x = self.find_curr_best();
+            println!("you can get {} through playing {:?}", x.0, x.1);
+
             let mut line = String::new();
             let b1 = std::io::stdin().read_line(&mut line).unwrap();
             if b1 < 2 || b1 > 3 {
